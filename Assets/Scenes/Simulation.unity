@@ -586,10 +586,11 @@ MonoBehaviour:
   startRadius: 0.51
   deposit: 0.5
   decay: 0.081
-  sensorAngleDegrees: 8.4
-  rotationAngleDegrees: 34.7
+  sensorAngleDegrees: 15
+  rotationAngleDegrees: 4
   sensorOffsetDistance: 0.01
   stepSize: 0.001
+  particleSimuation: 0
   Pointer: {fileID: 578834393}
   pointerRadius: 0
   pointerChemicalA: 0
