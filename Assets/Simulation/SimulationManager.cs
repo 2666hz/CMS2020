@@ -18,17 +18,20 @@ public class SimulationManager : MonoBehaviour
 	[Range(0f, 180f)] public float rotationAngleDegrees = 45f;//in degrees
 	[Range(0f, 0.1f)] public float sensorOffsetDistance = 0.01f;
 	[Range(0f, 0.01f)] public float stepSize = 0.001f;
+	[Range(0, 1)] public int particleSimuation = 0;
 
 	[Header("Interaction")]
 	public GameObject Pointer;
 	[Range(0f, 1f)] public float pointerRadius = 0.01f;
-	[Range(-1.0f, 1f)] public float pointerValue = 0.5f;	
+	[Range(-1.0f, 1f)] public float pointerChemicalA = 0.0f;
+	[Range(-1.0f, 1f)] public float pointerParticleAttraction = 0.0f;
 
 	private float sensorAngle;              //in radians
 	private float rotationAngle;            //in radians
 	private Vector2 pointerUV;
 	private RenderTexture trail;
-	private int initHandle, particleHandle, trailHandle;
+	private int initHandle, trailHandle;
+	private int[] particleHandle = new int[2];
 	private ComputeBuffer particleBuffer;
 
 	private static int GroupCount = 8;       // Group size has to be same with the compute shader group size
@@ -62,7 +65,8 @@ public class SimulationManager : MonoBehaviour
 
 		// Compute shader connections...
 		initHandle = shader.FindKernel("Init");
-		particleHandle = shader.FindKernel("MoveParticles");
+		particleHandle[0] = shader.FindKernel("MoveParticlesA");
+		particleHandle[1] = shader.FindKernel("MoveParticlesB");
 		trailHandle = shader.FindKernel("StepTrail");
 
 		UpdateRuntimeParameters();
@@ -87,7 +91,8 @@ public class SimulationManager : MonoBehaviour
 
 		Dispatch(initHandle, numberOfParticles / GroupCount, 1, 1);
 
-		shader.SetBuffer(particleHandle, "particleBuffer", particleBuffer);
+		shader.SetBuffer(particleHandle[0], "particleBuffer", particleBuffer);
+		shader.SetBuffer(particleHandle[1], "particleBuffer", particleBuffer);
 	}
 
 	void InitializeTrail()
@@ -104,7 +109,8 @@ public class SimulationManager : MonoBehaviour
 		var rend = GetComponent<Renderer>();
 		rend.material.mainTexture = trail;
 
-		shader.SetTexture(particleHandle, "TrailBuffer", trail);
+		shader.SetTexture(particleHandle[0], "TrailBuffer", trail);
+		shader.SetTexture(particleHandle[1], "TrailBuffer", trail);
 		shader.SetTexture(trailHandle, "TrailBuffer", trail);
 	}
 
@@ -162,6 +168,7 @@ public class SimulationManager : MonoBehaviour
 
 	void UpdateRuntimeParameters()
 	{
+		shader.SetFloat("deltaTime", Time.deltaTime);
 		sensorAngle = sensorAngleDegrees * 0.0174533f;
 		rotationAngle = rotationAngleDegrees * 0.0174533f;
 		shader.SetFloat("sensorAngle", sensorAngle);
@@ -173,12 +180,13 @@ public class SimulationManager : MonoBehaviour
 		shader.SetFloat("startRadius", startRadius);
 		shader.SetVector("pointerUV", pointerUV);
 		shader.SetFloat("pointerRadius", pointerRadius);
-		shader.SetFloat("pointerValue", pointerValue);
+		shader.SetFloat("pointerChemicalA", pointerChemicalA);
+		shader.SetFloat("pointerParticleAttraction", pointerParticleAttraction);
 	}
 
 	void UpdateParticles()
 	{
-		Dispatch(particleHandle, numberOfParticles / GroupCount, 1, 1);
+		Dispatch(particleHandle[particleSimuation], numberOfParticles / GroupCount, 1, 1);
 	}
 
 	void UpdateTrail()

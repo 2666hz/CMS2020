@@ -591,5 +591,6 @@ MonoBehaviour:
   sensorOffsetDistance: 0.01
   stepSize: 0.001
   Pointer: {fileID: 578834393}
-  pointerRadius: 0.01
-  pointerValue: 0.5
+  pointerRadius: 0
+  pointerChemicalA: 0
+  pointerParticleAttraction: 0

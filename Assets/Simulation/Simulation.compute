@@ -2,16 +2,50 @@
 // author: Deniz Bicer
 // https://github.com/DenizBicer/Physarum
 
+// These 3 lines declare different "entry points" into this code...
+// They are used with the computerShader.dispatch() and findKernel() functions in C#
 #pragma kernel Init
-#pragma kernel MoveParticles
+#pragma kernel MoveParticlesA
+#pragma kernel MoveParticlesB
 #pragma kernel StepTrail
+
+// These are our fixed settings.. These cannot be changed after starting...
+float2 trailDimension;
+
+// These are our Global parameters. These can be changed in real-time
+float sensorAngle;
+float rotationAngle;
+float sensorOffsetDistance;
+float stepSize;
+float decay; // rate that the chemical fades from the environment
+float deposit; // rate that the particle deposits chemical in the environment
+
+float deltaTime;
+
+// Parameters influencing the start of the simulation..
+float2 startPosition; // start position
+float startRadius; // where the particles begin their life.
+
+// There are our user "pointer" parameters...
+float2 pointerUV;
+float pointerRadius;
+float pointerChemicalA;
+float pointerParticleAttraction;
 
 struct Particle
 {
 	float2 pos; 	// between 0-1
 	float angle;	// in radians
+	float age;
 };
 
+// ReadWrite array of particle structs
+RWStructuredBuffer<Particle> particleBuffer; // 1D array of Particle structs
+
+// ReadWrite 2D array of 4 chemical values
+RWTexture2D<float4> TrailBuffer; // 2D Grid of float4
+
+// A pseudo-random number generator.. returns a number between 0.0 and MAXFLOAT
 uint wang_hash(uint seed)
 {
 	seed = (seed ^ 61) ^ (seed >> 16);
@@ -22,11 +56,20 @@ uint wang_hash(uint seed)
 	return seed;
 }
 
+// Return a random number between 0.0f and 1.0f
 float wang_float(uint hash)
 {
 	return wang_hash(hash) / float(0x7FFFFFFF) / 2.0;
 }
 
+// Returns -1 or 1
+float randomSign(float v)
+{
+	float x = wang_float(v);
+	return (step(0.5, x)*2.0) - 1.0;
+}
+
+//
 float directTo(float2 pos, float2 directedPos)
 {
 	float2 direction = directedPos - pos;
@@ -40,51 +83,42 @@ float insideCircle(float2 v, float2 center, float radius)
 	return (step(radius, length(position)) + 1.0) % 2.0;
 }
 
-// Returns -1 or 1
-float randomSign(float v)
+void RandomStart(uint id, out float2 pos, out float angle)
 {
-	float x = wang_float(v);
-	return (step(0.5, x)*2.0) - 1.0;
+	// Give each particular a random initialisation position..
+	// x, y are range from -startRadius/2 to startRadius/2
+	float x = (wang_float(id.x) - 0.5f) * startRadius;
+	float y = (wang_float(id.x + 17) - 0.5f) * startRadius;
+
+	// Shift to 0 - 1
+	pos = float2(x, y) + float2(0.5, 0.5);
+
+	// Every particle begins with a random direction
+	angle = wang_float(id.x + 123) * 6.283185307179586476925286766559; // x 2 x PI
 }
-
-float2 trailDimension;
-float sensorAngle;
-float rotationAngle;
-float sensorOffsetDistance;
-float stepSize;
-float decay;
-float deposit;
-float startRadius;
-float2 pointerUV;
-float pointerRadius;
-float pointerValue;
-
-RWStructuredBuffer<Particle> particleBuffer; // 1D array of Particle structs
-RWTexture2D<float4> TrailBuffer; // 2D Grid of float4
 
 [numthreads(8, 1, 1)]
 void Init(uint3 id: SV_DISPATCHTHREADID)
 {
 	// Give each particular a random initialisation position..
+	// x, y are range from -startRadius/2 to startRadius/2
 	float x = (wang_float(id.x) - 0.5f) * startRadius;
 	float y = (wang_float(id.x + 17) - 0.5f) * startRadius;
-	float2 pos = float2(x, y) + float2(0.5, 0.5);
 
-	// Every particle begins with a random direction
-	float angle = wang_float(id.x + 123) * 6.283185307179586476925286766559;
-
-	// Every particle begins by looking toards x=0.5 y=0.5
-//	float angle = directTo(pos, float2(0.5, 0.5));
+	float2 pos; float angle;
+	RandomStart(id.x, pos, angle);
 
 	particleBuffer[id.x].pos = pos;
 	particleBuffer[id.x].angle = angle;
+	particleBuffer[id.x].age = 0;
 }
 
 [numthreads(8, 1, 1)]
-void MoveParticles(uint3 id: SV_DISPATCHTHREADID)
+void MoveParticlesA(uint3 id: SV_DISPATCHTHREADID)
 {
 	float angle = particleBuffer[id.x].angle;
 	float2 pos = particleBuffer[id.x].pos;
+	float age = particleBuffer[id.x].age;
 
 	// Calculate 2D coordinates of the 3 sensing positions
 	float2 frontPos = frac(pos + float2(cos(angle) *sensorOffsetDistance, sin(angle) *sensorOffsetDistance));
@@ -99,13 +133,13 @@ void MoveParticles(uint3 id: SV_DISPATCHTHREADID)
 	// Decide on the next best step
 	if ((F > FL) && (F > FR))
 	{
-//		angle -= rotationAngle;
+		//		angle -= rotationAngle;
 	}
 	else if ((F < FL) && (F < FR)) // Forward is less than Left and Right, so turn randomly
 	{
 		angle = angle + rotationAngle * randomSign(id.x);
 	}
-	else if (FL < FR) 
+	else if (FL < FR)
 	{
 		angle -= rotationAngle;
 	}
@@ -113,6 +147,11 @@ void MoveParticles(uint3 id: SV_DISPATCHTHREADID)
 	{
 		angle += rotationAngle;
 	}
+
+	// Attraction to pointer
+	float2 attraction = pointerUV - pos;
+	float distanceAttractor = length(attraction);
+	pos += normalize(attraction) * pointerParticleAttraction * sin(distanceAttractor);
 
 	// Calculate new position
 	float2 nextPos = pos + float2(cos(angle) * stepSize, sin(angle) * stepSize);
@@ -129,10 +168,76 @@ void MoveParticles(uint3 id: SV_DISPATCHTHREADID)
 	// Store new particle position and angle in particleBuffer
 	particleBuffer[id.x].pos = nextPos;
 	particleBuffer[id.x].angle = angle;
+	particleBuffer[id.x].age = age + deltaTime;
 
 	// Write chemical trail into TrailBuffer in z-channel
 	const float2 xy = nextPos * trailDimension;
-	TrailBuffer[xy] += float4(deposit, 0.0, 0.0, 0.0);
+	TrailBuffer[xy] += float4(deposit, 0.0, 1.0, 0.0);
+}
+
+[numthreads(8, 1, 1)]
+void MoveParticlesB(uint3 id: SV_DISPATCHTHREADID)
+{
+	float angle = particleBuffer[id.x].angle;
+	float2 pos = particleBuffer[id.x].pos;
+	float age = particleBuffer[id.x].age;
+
+	// Calculate 2D coordinates of the 3 sensing positions
+	float2 frontPos = frac(pos + float2(cos(angle) *sensorOffsetDistance, sin(angle) *sensorOffsetDistance));
+	float2 frontLeftPos = frac(pos + float2(cos(angle + sensorAngle) *sensorOffsetDistance, sin(angle + sensorAngle) *sensorOffsetDistance));
+	float2 frontRightPos = frac(pos + float2(cos(angle - sensorAngle) *sensorOffsetDistance, sin(angle - sensorAngle) *sensorOffsetDistance));
+
+	// Read the chemical value of the 3 sensing positions from the trailbuffer
+	float F = TrailBuffer[frontPos * trailDimension.xy].x;
+	float FL = TrailBuffer[frontLeftPos * trailDimension.xy].x;
+	float FR = TrailBuffer[frontRightPos * trailDimension.xy].x;
+
+	// Decide on the next best step
+	if ((F > FL) && (F > FR))
+	{
+//		angle -= rotationAngle;
+	}
+	else
+	{
+		if (FL < FR)
+		{
+			angle -= rotationAngle;
+		}
+		else if (FR < FL)
+		{
+			angle += rotationAngle;
+		}
+		else // FL == FR and > F
+		{
+			angle += rotationAngle * randomSign(id.x);
+		}
+	}
+	
+		// Attraction to pointer
+	float2 attraction = pointerUV - pos;
+	float distanceAttractor = length(attraction);
+	pos += normalize(attraction) * pointerParticleAttraction * sin(distanceAttractor);
+
+	// Calculate new position
+	float2 nextPos = pos + float2(cos(angle) * stepSize, sin(angle) * stepSize);
+
+	// Keep the particles inside a circle...
+	// Check if nextPos is within the boundries
+//	float t1 = insideCircle(nextPos, float2(0.5, 0.5), 0.5); //return 1 if v inside the circle, return 0 otherwise
+//	angle = angle + rotationAngle * randomSign(id.x + 1) * (t1 - 1);
+//	nextPos = saturate(nextPos*t1 + pos * (1 - t1)); // saturate clamps the specified value within the range of 0 to 1.
+
+	// Or more simply, wrap the particles around to the other side...
+	nextPos = frac(nextPos); // frac() keeps the fraction part only so 1.02 -> 0.02 and -0.02 -> 0.098
+
+	// Store new particle position and angle in particleBuffer
+	particleBuffer[id.x].pos = nextPos;
+	particleBuffer[id.x].angle = angle;
+	particleBuffer[id.x].age = age + deltaTime;
+
+	// Write chemical trail into TrailBuffer in z-channel
+	const float2 xy = nextPos * trailDimension;
+	TrailBuffer[xy] += float4(deposit, 0.0, 1.0, 0.0);
 }
 
 // Update the "Environment" TrailBuffer
@@ -157,10 +262,10 @@ void StepTrail(uint3 id : SV_DISPATCHTHREADID)
 
 	// Lets draw into the .y channel of our trail map at the pointer...
 	float distanceToPointer = length(uv - pointerUV);
-	float pointerStrength = step(distanceToPointer, pointerRadius) * pointerValue; // 1 or 0
+	float pointerStrength = step(distanceToPointer, pointerRadius) * pointerChemicalA; // 1 or 0
 	value.x += pointerStrength;
 
 						//		Red	Green	Blue	Alpha
-	TrailBuffer[id.xy] = float4(value.x, value.x, value.x, 1.0f);		// float4(value.x, value.y, value.z, value.w);
+	TrailBuffer[id.xy] = float4(value.x, value.z, 0, 1.0f);		// float4(value.x, value.y, value.z, value.w);
 }
 
