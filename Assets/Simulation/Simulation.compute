@@ -5,8 +5,7 @@
 // These 3 lines declare different "entry points" into this code...
 // They are used with the computerShader.dispatch() and findKernel() functions in C#
 #pragma kernel Init
-#pragma kernel MoveParticlesA
-#pragma kernel MoveParticlesB
+#pragma kernel MoveParticles
 #pragma kernel StepTrail
 
 // These are our fixed settings.. These cannot be changed after starting...
@@ -114,7 +113,7 @@ void Init(uint3 id: SV_DISPATCHTHREADID)
 }
 
 [numthreads(8, 1, 1)]
-void MoveParticlesA(uint3 id: SV_DISPATCHTHREADID)
+void MoveParticles(uint3 id: SV_DISPATCHTHREADID)
 {
 	float angle = particleBuffer[id.x].angle;
 	float2 pos = particleBuffer[id.x].pos;
@@ -149,71 +148,6 @@ void MoveParticlesA(uint3 id: SV_DISPATCHTHREADID)
 	}
 
 	// Attraction to pointer
-	float2 attraction = pointerUV - pos;
-	float distanceAttractor = length(attraction);
-	pos += normalize(attraction) * pointerParticleAttraction * sin(distanceAttractor);
-
-	// Calculate new position
-	float2 nextPos = pos + float2(cos(angle) * stepSize, sin(angle) * stepSize);
-
-	// Keep the particles inside a circle...
-	// Check if nextPos is within the boundries
-//	float t1 = insideCircle(nextPos, float2(0.5, 0.5), 0.5); //return 1 if v inside the circle, return 0 otherwise
-//	angle = angle + rotationAngle * randomSign(id.x + 1) * (t1 - 1);
-//	nextPos = saturate(nextPos*t1 + pos * (1 - t1)); // saturate clamps the specified value within the range of 0 to 1.
-
-	// Or more simply, wrap the particles around to the other side...
-	nextPos = frac(nextPos); // frac() keeps the fraction part only so 1.02 -> 0.02 and -0.02 -> 0.098
-
-	// Store new particle position and angle in particleBuffer
-	particleBuffer[id.x].pos = nextPos;
-	particleBuffer[id.x].angle = angle;
-	particleBuffer[id.x].age = age + deltaTime;
-
-	// Write chemical trail into TrailBuffer in z-channel
-	const float2 xy = nextPos * trailDimension;
-	TrailBuffer[xy] += float4(deposit, 0.0, 1.0, 0.0);
-}
-
-[numthreads(8, 1, 1)]
-void MoveParticlesB(uint3 id: SV_DISPATCHTHREADID)
-{
-	float angle = particleBuffer[id.x].angle;
-	float2 pos = particleBuffer[id.x].pos;
-	float age = particleBuffer[id.x].age;
-
-	// Calculate 2D coordinates of the 3 sensing positions
-	float2 frontPos = frac(pos + float2(cos(angle) *sensorOffsetDistance, sin(angle) *sensorOffsetDistance));
-	float2 frontLeftPos = frac(pos + float2(cos(angle + sensorAngle) *sensorOffsetDistance, sin(angle + sensorAngle) *sensorOffsetDistance));
-	float2 frontRightPos = frac(pos + float2(cos(angle - sensorAngle) *sensorOffsetDistance, sin(angle - sensorAngle) *sensorOffsetDistance));
-
-	// Read the chemical value of the 3 sensing positions from the trailbuffer
-	float F = TrailBuffer[frontPos * trailDimension.xy].x;
-	float FL = TrailBuffer[frontLeftPos * trailDimension.xy].x;
-	float FR = TrailBuffer[frontRightPos * trailDimension.xy].x;
-
-	// Decide on the next best step
-	if ((F > FL) && (F > FR))
-	{
-//		angle -= rotationAngle;
-	}
-	else
-	{
-		if (FL < FR)
-		{
-			angle -= rotationAngle;
-		}
-		else if (FR < FL)
-		{
-			angle += rotationAngle;
-		}
-		else // FL == FR and > F
-		{
-			angle += rotationAngle * randomSign(id.x);
-		}
-	}
-	
-		// Attraction to pointer
 	float2 attraction = pointerUV - pos;
 	float distanceAttractor = length(attraction);
 	pos += normalize(attraction) * pointerParticleAttraction * sin(distanceAttractor);

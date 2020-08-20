@@ -486,7 +486,7 @@ GameObject:
   - component: {fileID: 2121705233}
   - component: {fileID: 2121705237}
   m_Layer: 0
-  m_Name: Plane
+  m_Name: SimPlane
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -581,16 +581,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   dimension: 1024
   numberOfParticles: 524280
-  shader: {fileID: 7200000, guid: 2012a21198d7a5448b05e294918919ef, type: 3}
+  computeShader: {fileID: 7200000, guid: 2012a21198d7a5448b05e294918919ef, type: 3}
+  trail: {fileID: 8400000, guid: 5c4ebd4a790f13843bad70cc49480fc8, type: 2}
   m_bActive: 1
   startRadius: 0.51
   deposit: 0.5
   decay: 0.081
-  sensorAngleDegrees: 15
-  rotationAngleDegrees: 4
-  sensorOffsetDistance: 0.01
-  stepSize: 0.001
-  particleSimuation: 0
+  sensorAngleDegrees: 6
+  rotationAngleDegrees: 15
+  sensorOffsetDistance: 0.0105
+  stepSize: 0.00038
   Pointer: {fileID: 578834393}
   pointerRadius: 0
   pointerChemicalA: 0

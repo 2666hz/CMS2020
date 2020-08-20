@@ -38,22 +38,50 @@ Preset:
     value: 
     objectReference: {fileID: 7200000, guid: 2012a21198d7a5448b05e294918919ef, type: 3}
   - target: {fileID: 0}
+    propertyPath: m_bActive
+    value: 1
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: startRadius
+    value: 0.51
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: deposit
+    value: 0.5
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
     propertyPath: decay
-    value: 0.071
+    value: 0.081
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: sensorAngleDegrees
-    value: 45
+    value: 6
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: rotationAngleDegrees
-    value: 45
+    value: 15
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: sensorOffsetDistance
-    value: 0.064
+    value: 0.0105
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: stepSize
-    value: 0.001
+    value: 0.00038
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: Pointer
+    value: 
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: pointerRadius
+    value: 0
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: pointerChemicalA
+    value: 0
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: pointerParticleAttraction
+    value: 0
     objectReference: {fileID: 0}

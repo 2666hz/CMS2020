@@ -7,7 +7,8 @@ public class SimulationManager : MonoBehaviour
 	[Header("Initial values")]
 	public int dimension = 1024;
 	public int numberOfParticles = 524280;
-	[SerializeField] private ComputeShader shader;
+	public ComputeShader computeShader;
+	public RenderTexture trail;
 
 	[Header("Run time parameters")]
 	public bool m_bActive = false;
@@ -18,7 +19,6 @@ public class SimulationManager : MonoBehaviour
 	[Range(0f, 180f)] public float rotationAngleDegrees = 45f;//in degrees
 	[Range(0f, 0.1f)] public float sensorOffsetDistance = 0.01f;
 	[Range(0f, 0.01f)] public float stepSize = 0.001f;
-	[Range(0, 1)] public int particleSimuation = 0;
 
 	[Header("Interaction")]
 	public GameObject Pointer;
@@ -29,9 +29,8 @@ public class SimulationManager : MonoBehaviour
 	private float sensorAngle;              //in radians
 	private float rotationAngle;            //in radians
 	private Vector2 pointerUV;
-	private RenderTexture trail;
-	private int initHandle, trailHandle;
-	private int[] particleHandle = new int[2];
+
+	private int initHandle, trailHandle, particleHandle;
 	private ComputeBuffer particleBuffer;
 
 	private static int GroupCount = 8;       // Group size has to be same with the compute shader group size
@@ -56,18 +55,17 @@ public class SimulationManager : MonoBehaviour
 	// Start is called before the first frame update
 	void Start()
 	{
-		if (shader == null)
+		if (computeShader == null)
 		{
-			Debug.LogError("PhysarumSurface shader has to be assigned for PhysarumBehaviour to work.");
+			Debug.LogError("Simulation requires computerShader to work.");
 			this.enabled = false;
 			return;
 		}
 
 		// Compute shader connections...
-		initHandle = shader.FindKernel("Init");
-		particleHandle[0] = shader.FindKernel("MoveParticlesA");
-		particleHandle[1] = shader.FindKernel("MoveParticlesB");
-		trailHandle = shader.FindKernel("StepTrail");
+		initHandle = computeShader.FindKernel("Init");
+		particleHandle = computeShader.FindKernel("MoveParticles");
+		trailHandle = computeShader.FindKernel("StepTrail");
 
 		UpdateRuntimeParameters();
 		InitializeParticles();
@@ -85,33 +83,32 @@ public class SimulationManager : MonoBehaviour
 		particleBuffer.SetData(data);
 
 		//initialize particles with random positions
-		shader.SetInt("numberOfParticles", numberOfParticles);
-		shader.SetVector("trailDimension", Vector2.one * dimension);
-		shader.SetBuffer(initHandle, "particleBuffer", particleBuffer);
+		computeShader.SetInt("numberOfParticles", numberOfParticles);
+		computeShader.SetVector("trailDimension", Vector2.one * dimension);
+		computeShader.SetBuffer(initHandle, "particleBuffer", particleBuffer);
 
 		Dispatch(initHandle, numberOfParticles / GroupCount, 1, 1);
 
-		shader.SetBuffer(particleHandle[0], "particleBuffer", particleBuffer);
-		shader.SetBuffer(particleHandle[1], "particleBuffer", particleBuffer);
+		computeShader.SetBuffer(particleHandle, "particleBuffer", particleBuffer);
 	}
 
 	void InitializeTrail()
 	{
-		// By default, a ARGB32 texture is created. Currently we are only using the R channel,
-		// so this could be changed to just RenderTextureFormat.R8
-		// But note that you must also change RWTexture2D<float4> TrailBuffer; declaration in the compute shader 
-		trail = new RenderTexture(dimension, dimension, 24); //, RenderTextureFormat.R8); //, RenderTextureFormat.ARGBFloat);
-		trail.enableRandomWrite = true;
-		trail.Create();
+		if (trail.enableRandomWrite == false)
+		{
+			trail.Release();
+			trail.enableRandomWrite = true;
+			trail.Create();
+			Debug.Log("Recreate " + trail + " with enableRandomWrite = true");
+		}
 		Debug.Log(trail.format);
 
 		// Set the TrailBuffer as the texture of the material of this objects
 		var rend = GetComponent<Renderer>();
 		rend.material.mainTexture = trail;
 
-		shader.SetTexture(particleHandle[0], "TrailBuffer", trail);
-		shader.SetTexture(particleHandle[1], "TrailBuffer", trail);
-		shader.SetTexture(trailHandle, "TrailBuffer", trail);
+		computeShader.SetTexture(particleHandle, "TrailBuffer", trail);
+		computeShader.SetTexture(trailHandle, "TrailBuffer", trail);
 	}
 
 	// Update is called once per frame
@@ -168,25 +165,25 @@ public class SimulationManager : MonoBehaviour
 
 	void UpdateRuntimeParameters()
 	{
-		shader.SetFloat("deltaTime", Time.deltaTime);
+		computeShader.SetFloat("deltaTime", Time.deltaTime);
 		sensorAngle = sensorAngleDegrees * 0.0174533f;
 		rotationAngle = rotationAngleDegrees * 0.0174533f;
-		shader.SetFloat("sensorAngle", sensorAngle);
-		shader.SetFloat("rotationAngle", rotationAngle);
-		shader.SetFloat("sensorOffsetDistance", sensorOffsetDistance);
-		shader.SetFloat("stepSize", stepSize);
-		shader.SetFloat("decay", decay);
-		shader.SetFloat("deposit", deposit);
-		shader.SetFloat("startRadius", startRadius);
-		shader.SetVector("pointerUV", pointerUV);
-		shader.SetFloat("pointerRadius", pointerRadius);
-		shader.SetFloat("pointerChemicalA", pointerChemicalA);
-		shader.SetFloat("pointerParticleAttraction", pointerParticleAttraction);
+		computeShader.SetFloat("sensorAngle", sensorAngle);
+		computeShader.SetFloat("rotationAngle", rotationAngle);
+		computeShader.SetFloat("sensorOffsetDistance", sensorOffsetDistance);
+		computeShader.SetFloat("stepSize", stepSize);
+		computeShader.SetFloat("decay", decay);
+		computeShader.SetFloat("deposit", deposit);
+		computeShader.SetFloat("startRadius", startRadius);
+		computeShader.SetVector("pointerUV", pointerUV);
+		computeShader.SetFloat("pointerRadius", pointerRadius);
+		computeShader.SetFloat("pointerChemicalA", pointerChemicalA);
+		computeShader.SetFloat("pointerParticleAttraction", pointerParticleAttraction);
 	}
 
 	void UpdateParticles()
 	{
-		Dispatch(particleHandle[particleSimuation], numberOfParticles / GroupCount, 1, 1);
+		Dispatch(particleHandle, numberOfParticles / GroupCount, 1, 1);
 	}
 
 	void UpdateTrail()
@@ -196,7 +193,7 @@ public class SimulationManager : MonoBehaviour
 
 	void Dispatch(int kernelIndex, int threadGroupsX, int threadGroupsY, int threadGroupsZ)
 	{
-		shader.Dispatch(kernelIndex, threadGroupsX, threadGroupsY, threadGroupsZ);
+		computeShader.Dispatch(kernelIndex, threadGroupsX, threadGroupsY, threadGroupsZ);
 	}
 
 	void OnDestroy()
