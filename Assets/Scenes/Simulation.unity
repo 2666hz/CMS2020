@@ -43,7 +43,7 @@ RenderSettings:
 --- !u!157 &3
 LightmapSettings:
   m_ObjectHideFlags: 0
-  serializedVersion: 11
+  serializedVersion: 12
   m_GIWorkflowMode: 1
   m_GISettings:
     serializedVersion: 2
@@ -98,7 +98,7 @@ LightmapSettings:
     m_TrainingDataDestination: TrainingData
     m_LightProbeSampleCountMultiplier: 4
   m_LightingDataAsset: {fileID: 0}
-  m_UseShadowmask: 1
+  m_LightingSettings: {fileID: 0}
 --- !u!196 &4
 NavMeshSettings:
   serializedVersion: 2
@@ -118,6 +118,8 @@ NavMeshSettings:
     manualTileSize: 0
     tileSize: 256
     accuratePlacement: 0
+    maxJobWorkers: 0
+    preserveTilesOutsideBounds: 0
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
@@ -343,6 +345,7 @@ MeshRenderer:
   m_LightProbeUsage: 1
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -367,6 +370,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &578834396
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -521,6 +525,7 @@ MeshRenderer:
   m_LightProbeUsage: 1
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -545,6 +550,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &2121705235
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -579,19 +585,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4ad235db80639e44ea309152af46c622, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  dimension: 1024
-  numberOfParticles: 524280
+  trailTexSize: 1024
+  numberOfParticles: 1048576
   computeShader: {fileID: 7200000, guid: 2012a21198d7a5448b05e294918919ef, type: 3}
-  trail: {fileID: 8400000, guid: 5c4ebd4a790f13843bad70cc49480fc8, type: 2}
-  m_bActive: 1
-  startRadius: 0.51
-  deposit: 0.5
-  decay: 0.081
-  sensorAngleDegrees: 6
-  rotationAngleDegrees: 15
-  sensorOffsetDistance: 0.0105
-  stepSize: 0.00038
-  Pointer: {fileID: 578834393}
+  trailTexture: {fileID: 0}
+  m_active: 1
+  m_restart: 0
+  startRadius: 0.648
+  deposit: 1
+  decay: 0.012
+  sensorAngleDegrees: 24
+  rotationAngleDegrees: 35.6
+  sensorOffsetDistance: 0.0265
+  stepSize: 0.00218
+  Pointer: {fileID: 0}
   pointerRadius: 0
   pointerChemicalA: 0
   pointerParticleAttraction: 0

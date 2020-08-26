@@ -1,17 +1,19 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class SimulationManager : MonoBehaviour
 {
 	[Header("Initial values")]
-	public int dimension = 1024;
+	public int trailTexSize = 1024;
 	public int numberOfParticles = 524280;
 	public ComputeShader computeShader;
-	public RenderTexture trail;
+	public RenderTexture trailTexture;
 
 	[Header("Run time parameters")]
-	public bool m_bActive = false;
+	public bool m_active = true;
+	public bool m_restart = false;
 	[Range(0f, 1.0f)] public float startRadius = 0.5f;
 	[Range(0f, 1f)] public float deposit = 1.0f;
 	[Range(0f, 1f)] public float decay = 0.002f;
@@ -30,10 +32,15 @@ public class SimulationManager : MonoBehaviour
 	private float rotationAngle;            //in radians
 	private Vector2 pointerUV;
 
-	private int initHandle, trailHandle, particleHandle;
+	private int kernelParticleInit, kernelParticleStep, kernelTrailInit, kernelTrailStep;
 	private ComputeBuffer particleBuffer;
+	private int _particleCount = 0;
 
-	private static int GroupCount = 8;       // Group size has to be same with the compute shader group size
+	// See PARTICLETHREADSPERGROUP and TRAILTHREADSPERGROUP in Simulation.compute
+	private static readonly int m_particleThreadsPerGroup = 64; // { 64, 1, 1 };
+	private int m_particleThreadGroups = 0; // = numberOfParticles / ParticleThreadsPerGroup
+	private static readonly int[] m_trailThreadsPerGroup = { 8, 8 };
+	private int[] m_trailThreadGroups = { 0, 0 }; // = trailTexSize / TrailThreadsPerGroup
 
 	struct Particle
 	{
@@ -49,7 +56,19 @@ public class SimulationManager : MonoBehaviour
 
 	void OnValidate() // Called by Unity when someone changes a value in the Editor
 	{
-		if (dimension < GroupCount) dimension = GroupCount;
+		// Did trailTexSize change?
+		if (trailTexture != null && trailTexture.width != trailTexSize)
+			InitializeTrail();
+
+		// Did particle count change?
+		if (particleBuffer != null && numberOfParticles != _particleCount)
+			InitializeParticles();
+
+		if (m_restart)
+		{
+			m_restart = false;
+			ResetSimulation();
+		}
 	}
 
 	// Start is called before the first frame update
@@ -63,52 +82,15 @@ public class SimulationManager : MonoBehaviour
 		}
 
 		// Compute shader connections...
-		initHandle = computeShader.FindKernel("Init");
-		particleHandle = computeShader.FindKernel("MoveParticles");
-		trailHandle = computeShader.FindKernel("StepTrail");
+		kernelParticleInit = computeShader.FindKernel("InitParticles");
+		kernelParticleStep = computeShader.FindKernel("MoveParticles");
+		kernelTrailStep = computeShader.FindKernel("StepTrail");
+		kernelTrailInit = computeShader.FindKernel("InitTrail");
 
 		UpdateRuntimeParameters();
+
 		InitializeParticles();
 		InitializeTrail();
-	}
-
-	void InitializeParticles()
-	{
-		if (numberOfParticles > GroupCount * 65535) numberOfParticles = GroupCount * 65535;
-
-		Debug.Log("Particles: " + numberOfParticles + "Thread groups: " + numberOfParticles / GroupCount);
-
-		Particle[] data = new Particle[numberOfParticles];
-		particleBuffer = new ComputeBuffer(data.Length, 12);
-		particleBuffer.SetData(data);
-
-		//initialize particles with random positions
-		computeShader.SetInt("numberOfParticles", numberOfParticles);
-		computeShader.SetVector("trailDimension", Vector2.one * dimension);
-		computeShader.SetBuffer(initHandle, "particleBuffer", particleBuffer);
-
-		Dispatch(initHandle, numberOfParticles / GroupCount, 1, 1);
-
-		computeShader.SetBuffer(particleHandle, "particleBuffer", particleBuffer);
-	}
-
-	void InitializeTrail()
-	{
-		if (trail.enableRandomWrite == false)
-		{
-			trail.Release();
-			trail.enableRandomWrite = true;
-			trail.Create();
-			Debug.Log("Recreate " + trail + " with enableRandomWrite = true");
-		}
-		Debug.Log(trail.format);
-
-		// Set the TrailBuffer as the texture of the material of this objects
-		var rend = GetComponent<Renderer>();
-		rend.material.mainTexture = trail;
-
-		computeShader.SetTexture(particleHandle, "TrailBuffer", trail);
-		computeShader.SetTexture(trailHandle, "TrailBuffer", trail);
 	}
 
 	// Update is called once per frame
@@ -117,11 +99,131 @@ public class SimulationManager : MonoBehaviour
 		UpdatePointers();
 		UpdateRuntimeParameters();
 
-		if (m_bActive)
+		if (m_active)
 		{
 			UpdateParticles();
 			UpdateTrail();
 		}
+	}
+
+	void UpdateRuntimeParameters()
+	{
+		computeShader.SetFloat("deltaTime", Time.deltaTime);
+		sensorAngle = sensorAngleDegrees * 0.0174533f;
+		rotationAngle = rotationAngleDegrees * 0.0174533f;
+		computeShader.SetFloat("sensorAngle", sensorAngle);
+		computeShader.SetFloat("rotationAngle", rotationAngle);
+		computeShader.SetFloat("sensorOffsetDistance", sensorOffsetDistance);
+		computeShader.SetFloat("stepSize", stepSize);
+		computeShader.SetFloat("decay", decay);
+		computeShader.SetFloat("deposit", deposit);
+		computeShader.SetFloat("startRadius", startRadius);
+		computeShader.SetVector("pointerUV", pointerUV);
+		computeShader.SetFloat("pointerRadius", pointerRadius);
+		computeShader.SetFloat("pointerChemicalA", pointerChemicalA);
+		computeShader.SetFloat("pointerParticleAttraction", pointerParticleAttraction);
+	}
+
+	void InitializeParticles()
+	{
+		// Max number of thread groups per dimension is 65535 in D3D11
+		// D3D11_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION (65535).
+
+		if (numberOfParticles > m_particleThreadsPerGroup * 65535)
+			numberOfParticles = m_particleThreadsPerGroup * 65535;
+
+		m_particleThreadGroups = numberOfParticles / m_particleThreadsPerGroup;
+		Debug.Log("Particles: " + numberOfParticles + " Thread groups: " + m_particleThreadGroups);
+
+		Particle[] data = new Particle[numberOfParticles];
+		particleBuffer = new ComputeBuffer(data.Length, System.Runtime.InteropServices.Marshal.SizeOf<Particle>());
+		particleBuffer.SetData(data);
+		_particleCount = numberOfParticles;
+
+		//initialize particles with random positions
+		computeShader.SetInt("numberOfParticles", numberOfParticles);
+		computeShader.SetBuffer(kernelParticleInit, "particleBuffer", particleBuffer);
+		computeShader.SetBuffer(kernelParticleStep, "particleBuffer", particleBuffer);
+
+		Dispatch(kernelParticleInit, m_particleThreadGroups, 1, 1);
+	}
+
+	void InitializeTrail()
+	{
+		// Ensure our trail map is not smaller than one thread-group (8x8)
+		int minSize = m_trailThreadsPerGroup.Max();
+		if (trailTexSize < minSize) trailTexSize = minSize;
+
+		bool recreateTexture = false;
+
+		if (trailTexture == null)
+		{
+			trailTexture = new RenderTexture(trailTexSize, trailTexSize, 24); //, RenderTextureFormat.R8); //, RenderTextureFormat.ARGBFloat);
+			trailTexture.name = "TrailMap";
+
+			recreateTexture = true;
+		}
+		else if (trailTexture.enableRandomWrite == false || trailTexture.width != trailTexSize)
+		{
+			recreateTexture = true;
+		}
+
+		if (recreateTexture)
+		{
+			trailTexture.Release();
+			trailTexture.enableRandomWrite = true;
+			trailTexture.depth = 0;
+			trailTexture.width = trailTexSize;
+			trailTexture.height = trailTexSize;
+			trailTexture.wrapMode = TextureWrapMode.Repeat;
+			trailTexture.Create();
+
+			computeShader.SetTexture(kernelParticleStep, "TrailMap", trailTexture);
+			computeShader.SetTexture(kernelTrailStep, "TrailMap", trailTexture);
+			computeShader.SetTexture(kernelTrailInit, "TrailMap", trailTexture);
+
+			// Tell the computeShader how big our trailmap is..
+			float f = trailTexSize;
+			computeShader.SetFloat("fTrailMapDimension", f);
+			computeShader.SetInt("iTrailMapDimension", trailTexSize);
+			f = 1 / f;
+			computeShader.SetFloat("trailMapTexelSize", f);
+
+			// Set the TrailMap as the texture of the material of this objects
+			var rend = GetComponent<Renderer>();
+			rend.material.mainTexture = trailTexture;
+
+			Debug.Log("Created " + trailTexture + " with " + trailTexture.format);
+		}
+
+		m_trailThreadGroups[0] = trailTexSize / m_trailThreadsPerGroup[0];
+		m_trailThreadGroups[1] = trailTexSize / m_trailThreadsPerGroup[1];
+
+		Dispatch(kernelTrailInit, m_trailThreadGroups[0], m_trailThreadGroups[1], 1);
+	}
+
+	void ResetSimulation()
+	{
+		Dispatch(kernelParticleInit, m_particleThreadGroups, 1, 1);
+		Dispatch(kernelTrailInit, m_trailThreadGroups[0], m_trailThreadGroups[1], 1);
+	}
+
+	void UpdateParticles()
+	{
+		Dispatch(kernelParticleStep, m_particleThreadGroups, 1, 1);
+	}
+
+	void UpdateTrail()
+	{
+		Dispatch(kernelTrailStep, m_trailThreadGroups[0], m_trailThreadGroups[1], 1);
+	}
+
+	void Dispatch(int kernelIndex, int threadGroupsX, int threadGroupsY, int threadGroupsZ, string kernelName = null)
+	{
+		if (kernelName != null)
+			Debug.Log("Dispatch" + kernelName + m_trailThreadGroups[0] + "x" + m_trailThreadGroups[1] + "x 1 threadgroups");
+
+		computeShader.Dispatch(kernelIndex, threadGroupsX, threadGroupsY, threadGroupsZ);
 	}
 
 /*	void OnDrawGizmos()
@@ -163,42 +265,13 @@ public class SimulationManager : MonoBehaviour
 		pointerUV = hit.textureCoord;
 	}
 
-	void UpdateRuntimeParameters()
-	{
-		computeShader.SetFloat("deltaTime", Time.deltaTime);
-		sensorAngle = sensorAngleDegrees * 0.0174533f;
-		rotationAngle = rotationAngleDegrees * 0.0174533f;
-		computeShader.SetFloat("sensorAngle", sensorAngle);
-		computeShader.SetFloat("rotationAngle", rotationAngle);
-		computeShader.SetFloat("sensorOffsetDistance", sensorOffsetDistance);
-		computeShader.SetFloat("stepSize", stepSize);
-		computeShader.SetFloat("decay", decay);
-		computeShader.SetFloat("deposit", deposit);
-		computeShader.SetFloat("startRadius", startRadius);
-		computeShader.SetVector("pointerUV", pointerUV);
-		computeShader.SetFloat("pointerRadius", pointerRadius);
-		computeShader.SetFloat("pointerChemicalA", pointerChemicalA);
-		computeShader.SetFloat("pointerParticleAttraction", pointerParticleAttraction);
-	}
-
-	void UpdateParticles()
-	{
-		Dispatch(particleHandle, numberOfParticles / GroupCount, 1, 1);
-	}
-
-	void UpdateTrail()
-	{
-		Dispatch(trailHandle, dimension / GroupCount, dimension / GroupCount, 1);
-	}
-
-	void Dispatch(int kernelIndex, int threadGroupsX, int threadGroupsY, int threadGroupsZ)
-	{
-		computeShader.Dispatch(kernelIndex, threadGroupsX, threadGroupsY, threadGroupsZ);
-	}
-
 	void OnDestroy()
 	{
-		if (particleBuffer != null) particleBuffer.Release();
+		if (particleBuffer != null)
+			particleBuffer.Release();
+
+		if (trailTexture)
+			trailTexture.Release();
 	}
 }
 // public class Physarum : SimulationManager
