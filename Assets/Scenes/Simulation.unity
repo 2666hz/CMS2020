@@ -593,11 +593,12 @@ MonoBehaviour:
   m_restart: 0
   startRadius: 0.648
   deposit: 1
-  decay: 0.012
-  sensorAngleDegrees: 24
-  rotationAngleDegrees: 35.6
-  sensorOffsetDistance: 0.0265
-  stepSize: 0.00218
+  decay: 0.022
+  sensorAngleDegrees: 20.7
+  rotationAngleDegrees: 24.9
+  sensorOffsetDistance: 0.0064
+  stepSize: 0.00213
+  randomness: 0
   Pointer: {fileID: 0}
   pointerRadius: 0
   pointerChemicalA: 0

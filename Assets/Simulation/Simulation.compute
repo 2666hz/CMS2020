@@ -9,6 +9,8 @@
 #pragma kernel InitTrail
 #pragma kernel StepTrail
 
+//#pragma multi_compile MODE1 MODE2
+
 // The allowable parameter values for numthreads depends on the compute shader version.
 //	Compute Shader  Maximum Z   Maximum Threads(X * Y * Z)
 //		cs_4_x			1			768
@@ -28,6 +30,7 @@ float sensorOffsetDistance;
 float stepSize;
 float decay; // rate that the chemical fades from the environment
 float deposit; // rate that the particle deposits chemical in the environment
+float randomness;
 
 // Parameters influencing the start of the simulation..
 float2 startPosition; // start position
@@ -87,15 +90,15 @@ float randomSign1(uint seed)
 //	return step(wang_hash(seed), 2147483647) * 2 - 1;
 }
 
-// Returns -1 or 1
-float randomSign2(uint2 seed)
+float randomSign2(float2 seed2)
 {
-	return step(wang_hash(seed.x ^ wang_hash(seed.y)), 2147483647) * 2 - 1;
+//	seed2 *= randomness;
+	return 1;
 }
 
 float randomSign3(uint seed, float2 seed2)
 {
-	seed2 *= 4294967296.0;
+	seed2 *= randomness;
 	uint2 s = uint2(seed2);
 	return step(wang_hash(seed ^ wang_hash(s.x ^ wang_hash(s.y))), 2147483647) * 2 - 1;
 }
@@ -164,37 +167,34 @@ float SenseChemicalMap(float2 pos, float angle)
 	const float2 sensePos = pos + sensorOffsetDistance * float2(c, s);
 	return ReadTrail(sensePos).x;
 }
-
+/*
 // Original particle model as described in Jeff Jones, "Characteristics of Pattern Formation and Evolution in Approximations of Physarum Transport Networks", Artificial Life 2010 16:2, 127 - 153
 float TurnParticle(const float L, const float F, const float R, const uint3 id, const float2 pos)
 {
-	const float mx = max(L, R);
-	const float mn = min(L, R);
+	const float maxLR = max(L, R);
 
-//	const float maxLFR = max(mx, F);
-//	const float3 v = float3(L, F, R) / maxLFR;
-
-	// F > R && F > L
-	// F == R && F == L
-	// F == R && F > L
-	// F > R && F == L
-
-	// if Forward reading is strongest, keep going forward
-	if (F > mx)
+	// if Forward reading is strongest, or equal, keep going forward
+	if (F >= maxLR)
 		return 0;
-
-	// if both Left and Right are stronger and equal than forward, turn randomly
-	if (R == L)
-		return rotationAngle * randomSign3(id.x, pos);
-
+			
+	const float d = sign(L - R);
 	// if both Left and Right are stronger than forward, turn randomly
-	if ((F < mn)) // Forward is less than Left and Right, so turn randomly
-		return rotationAngle * randomSign3(id.x, pos);
+//	if (d == 0) // Forward is less than Left or Right, so turn randomly
+//		return rotationAngle * randomSign1(id.x); // 2(pos); //randomSign3(id.x, pos);
 
-	if (L < R)
-		return -rotationAngle;
-	
-	return rotationAngle;
+	return d * rotationAngle;
+}
+*/
+// Simplest version. No randomness.
+// If Forward strongest, go straight
+// If not, turn towards the largest of L or R.
+// If L = R, then go forward, even if F < L and F < R
+// If F = L = R, then go straight
+float TurnParticle(const float L, const float F, const float R, const uint3 id, const float2 pos)
+{
+	if (F > L && F > R)
+		return 0;
+	return sign(L - R) * rotationAngle;
 }
 
 PARTICLETHREADSPERGROUP

@@ -21,6 +21,7 @@ public class SimulationManager : MonoBehaviour
 	[Range(0f, 180f)] public float rotationAngleDegrees = 45f;//in degrees
 	[Range(0f, 0.1f)] public float sensorOffsetDistance = 0.01f;
 	[Range(0f, 0.01f)] public float stepSize = 0.001f;
+	[Range(0f, 4294967296.0f)] public float randomness = 0;
 
 	[Header("Interaction")]
 	public GameObject Pointer;
@@ -118,6 +119,7 @@ public class SimulationManager : MonoBehaviour
 		computeShader.SetFloat("decay", decay);
 		computeShader.SetFloat("deposit", deposit);
 		computeShader.SetFloat("startRadius", startRadius);
+		computeShader.SetFloat("randomness", randomness);
 		computeShader.SetVector("pointerUV", pointerUV);
 		computeShader.SetFloat("pointerRadius", pointerRadius);
 		computeShader.SetFloat("pointerChemicalA", pointerChemicalA);
@@ -144,6 +146,7 @@ public class SimulationManager : MonoBehaviour
 		computeShader.SetInt("numberOfParticles", numberOfParticles);
 		computeShader.SetBuffer(kernelParticleInit, "particleBuffer", particleBuffer);
 		computeShader.SetBuffer(kernelParticleStep, "particleBuffer", particleBuffer);
+		computeShader.EnableKeyword("Mode1");
 
 		Dispatch(kernelParticleInit, m_particleThreadGroups, 1, 1);
 	}

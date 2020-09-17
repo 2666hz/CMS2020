@@ -26,52 +26,60 @@ Preset:
     value: 
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: dimension
+    propertyPath: trailTexSize
     value: 1024
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: numberOfParticles
-    value: 524280
+    value: 1048576
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: computeShader
     value: 
     objectReference: {fileID: 7200000, guid: 2012a21198d7a5448b05e294918919ef, type: 3}
   - target: {fileID: 0}
-    propertyPath: trail
+    propertyPath: trailTexture
     value: 
     objectReference: {fileID: 0}
   - target: {fileID: 0}
-    propertyPath: m_bActive
+    propertyPath: m_active
     value: 1
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: m_restart
+    value: 0
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: startRadius
-    value: 1
+    value: 0.648
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: deposit
-    value: 0.82
+    value: 1
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: decay
-    value: 0.025
+    value: 0.022
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: sensorAngleDegrees
-    value: 19.3
+    value: 20.7
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: rotationAngleDegrees
-    value: 15.7
+    value: 24.9
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: sensorOffsetDistance
-    value: 0.0265
+    value: 0.0064
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: stepSize
-    value: 0.00221
+    value: 0.00213
+    objectReference: {fileID: 0}
+  - target: {fileID: 0}
+    propertyPath: randomness
+    value: 0
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: Pointer
